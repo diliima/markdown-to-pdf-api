@@ -2,26 +2,14 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/*.py",
+      "src": "api/index.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
-      "src": "/verificar",
-      "dest": "/api/index"
-    },
-    {
-      "src": "/converter-markdown-pdf-base64",
-      "dest": "/api/index"
-    },
-    {
-      "src": "/converter-markdown-pdf",
-      "dest": "/api/index"
-    },
-    {
-      "src": "/",
-      "dest": "/api/index"
+      "src": "/(.*)",
+      "dest": "api/index.py"
     }
   ]
 }
