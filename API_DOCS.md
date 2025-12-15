@@ -1,8 +1,8 @@
-# API de Conversão Markdown para PDF
+# API de Conversão Markdown para PDF e Word
 
 ## 🚀 Visão Geral
 
-Esta API Flask permite converter texto Markdown em arquivos PDF através de requisições HTTP. Oferece duas modalidades de retorno: download direto ou dados em base64.
+Esta API Flask permite converter texto Markdown em arquivos PDF ou Word (.docx) através de requisições HTTP. Oferece duas modalidades de retorno: download direto ou dados em base64.
 
 ## 📡 Endpoints Disponíveis
 
@@ -18,7 +18,7 @@ Verifica se a API está funcionando.
 }
 ```
 
-### 2. Conversão com Download
+### 2. Conversão PDF com Download
 **POST** `/converter-markdown-pdf`
 
 Converte Markdown para PDF e retorna o arquivo para download.
@@ -26,7 +26,7 @@ Converte Markdown para PDF e retorna o arquivo para download.
 **Body (JSON):**
 ```json
 {
-    "texto_markdown": "# Título\n\nConte**údo** do documento...",
+    "texto_markdown": "# Título\n\nConteúdo do documento...",
     "nome_arquivo": "documento.pdf"  // opcional
 }
 ```
@@ -36,7 +36,7 @@ Converte Markdown para PDF e retorna o arquivo para download.
 - **400**: Erro de validação
 - **500**: Erro interno
 
-### 3. Conversão com Base64
+### 3. Conversão PDF com Base64
 **POST** `/converter-markdown-pdf-base64`
 
 Converte Markdown para PDF e retorna os dados em base64.
@@ -59,6 +59,47 @@ Converte Markdown para PDF e retorna os dados em base64.
 }
 ```
 
+### 4. Conversão Word com Download
+**POST** `/converter-markdown-docx`
+
+Converte Markdown para Word (.docx) e retorna o arquivo para download.
+
+**Body (JSON):**
+```json
+{
+    "texto_markdown": "# Título\n\nConteúdo do documento...",
+    "nome_arquivo": "documento.docx"  // opcional
+}
+```
+
+**Resposta:** 
+- **200**: Arquivo Word para download
+- **400**: Erro de validação
+- **500**: Erro interno
+
+### 5. Conversão Word com Base64
+**POST** `/converter-markdown-docx-base64`
+
+Converte Markdown para Word (.docx) e retorna os dados em base64.
+
+**Body (JSON):**
+```json
+{
+    "texto_markdown": "# Título\n\nConteúdo do documento...",
+    "nome_arquivo": "documento.docx"  // opcional
+}
+```
+
+**Resposta (200):**
+```json
+{
+    "status": "sucesso",
+    "nome_arquivo": "documento.docx",
+    "docx_base64": "UEsDBBQABgAIAAAAIQD...",
+    "tamanho": 4096
+}
+```
+
 ## 🛠️ Como Usar
 
 ### 1. Iniciar o Servidor
@@ -66,6 +107,9 @@ Converte Markdown para PDF e retorna os dados em base64.
 ```bash
 # Ativar ambiente virtual
 env\Scripts\activate
+
+# Instalar dependências (se necessário)
+pip install -r requirements.txt
 
 # Iniciar servidor
 python app.py
@@ -84,21 +128,29 @@ texto = """
 # Meu Relatório
 
 ## Introdução
-Este é um documento **importante**.
+Este é um documento **importante** com formatação *rica*.
 
-### Lista:
+### Lista de tarefas:
 - Item 1
 - Item 2
 - Item 3
 
 ```python
-print("Exemplo de código")
+print("Exemplo de código Python")
+def hello_world():
+    return "Hello, World!"
 ```
 
-> Citação importante.
+> Esta é uma citação importante que demonstra 
+> como o texto pode ser destacado no documento.
+
+## Conclusão
+Documento gerado automaticamente via API.
 """
 
-# Opção 1: Download direto
+# === CONVERSÃO PARA PDF ===
+
+# Opção 1: PDF - Download direto
 response = requests.post(
     'http://localhost:9000/converter-markdown-pdf',
     json={
@@ -112,7 +164,7 @@ if response.status_code == 200:
         f.write(response.content)
     print("PDF salvo com sucesso!")
 
-# Opção 2: Base64
+# Opção 2: PDF - Base64
 response = requests.post(
     'http://localhost:9000/converter-markdown-pdf-base64',
     json={
@@ -128,21 +180,65 @@ if response.status_code == 200:
     with open('relatorio_base64.pdf', 'wb') as f:
         f.write(pdf_bytes)
     print(f"PDF salvo: {data['nome_arquivo']} ({data['tamanho']} bytes)")
+
+# === CONVERSÃO PARA WORD ===
+
+# Opção 3: Word - Download direto
+response = requests.post(
+    'http://localhost:9000/converter-markdown-docx',
+    json={
+        'texto_markdown': texto,
+        'nome_arquivo': 'relatorio.docx'
+    }
+)
+
+if response.status_code == 200:
+    with open('relatorio.docx', 'wb') as f:
+        f.write(response.content)
+    print("Word salvo com sucesso!")
+
+# Opção 4: Word - Base64
+response = requests.post(
+    'http://localhost:9000/converter-markdown-docx-base64',
+    json={
+        'texto_markdown': texto,
+        'nome_arquivo': 'relatorio.docx'
+    }
+)
+
+if response.status_code == 200:
+    data = response.json()
+    docx_bytes = base64.b64decode(data['docx_base64'])
+    
+    with open('relatorio_base64.docx', 'wb') as f:
+        f.write(docx_bytes)
+    print(f"Word salvo: {data['nome_arquivo']} ({data['tamanho']} bytes)")
 ```
 
 ### 3. Exemplo com curl
 
 ```bash
-# Download direto
+# PDF - Download direto
 curl -X POST http://localhost:9000/converter-markdown-pdf \
   -H "Content-Type: application/json" \
   -d '{"texto_markdown":"# Título\n\nConteúdo **formatado**.","nome_arquivo":"teste.pdf"}' \
   --output teste.pdf
 
-# Base64
+# Word - Download direto
+curl -X POST http://localhost:9000/converter-markdown-docx \
+  -H "Content-Type: application/json" \
+  -d '{"texto_markdown":"# Título\n\nConteúdo **formatado**.","nome_arquivo":"teste.docx"}' \
+  --output teste.docx
+
+# PDF - Base64
 curl -X POST http://localhost:9000/converter-markdown-pdf-base64 \
   -H "Content-Type: application/json" \
   -d '{"texto_markdown":"# Título\n\nConteúdo **formatado**.","nome_arquivo":"teste.pdf"}'
+
+# Word - Base64
+curl -X POST http://localhost:9000/converter-markdown-docx-base64 \
+  -H "Content-Type: application/json" \
+  -d '{"texto_markdown":"# Título\n\nConteúdo **formatado**.","nome_arquivo":"teste.docx"}'
 
 # Health check
 curl http://localhost:9000/verificar
@@ -151,10 +247,18 @@ curl http://localhost:9000/verificar
 ### 4. Exemplo com JavaScript (fetch)
 
 ```javascript
-// Função para converter Markdown para PDF
-async function converterMarkdownPDF(textoMarkdown, nomeArquivo) {
+// Função genérica para converter Markdown
+async function converterMarkdown(textoMarkdown, nomeArquivo, formato = 'pdf') {
+    const endpoint = formato === 'pdf' ? 
+        'converter-markdown-pdf-base64' : 
+        'converter-markdown-docx-base64';
+    
+    const mimeType = formato === 'pdf' ? 
+        'application/pdf' : 
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
     try {
-        const response = await fetch('http://localhost:9000/converter-markdown-pdf-base64', {
+        const response = await fetch(`http://localhost:9000/${endpoint}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -167,15 +271,16 @@ async function converterMarkdownPDF(textoMarkdown, nomeArquivo) {
 
         if (response.ok) {
             const data = await response.json();
+            const base64Key = formato === 'pdf' ? 'pdf_base64' : 'docx_base64';
             
             // Converter base64 para blob
-            const byteCharacters = atob(data.pdf_base64);
+            const byteCharacters = atob(data[base64Key]);
             const byteNumbers = new Array(byteCharacters.length);
             for (let i = 0; i < byteCharacters.length; i++) {
                 byteNumbers[i] = byteCharacters.charCodeAt(i);
             }
             const byteArray = new Uint8Array(byteNumbers);
-            const blob = new Blob([byteArray], { type: 'application/pdf' });
+            const blob = new Blob([byteArray], { type: mimeType });
 
             // Criar link para download
             const url = window.URL.createObjectURL(blob);
@@ -184,7 +289,7 @@ async function converterMarkdownPDF(textoMarkdown, nomeArquivo) {
             link.download = data.nome_arquivo;
             link.click();
             
-            console.log('PDF baixado com sucesso!');
+            console.log(`${formato.toUpperCase()} baixado com sucesso!`);
         } else {
             console.error('Erro na conversão:', response.statusText);
         }
@@ -193,43 +298,41 @@ async function converterMarkdownPDF(textoMarkdown, nomeArquivo) {
     }
 }
 
-// Uso
+// Uso - Gerar PDF
 const markdown = `
 # Documento Web
 ## Gerado via JavaScript
 
-Este PDF foi criado a partir de uma **requisição web**.
+Este documento foi criado a partir de uma **requisição web**.
+
+### Funcionalidades:
+- Conversão para PDF
+- Conversão para Word
+- Download automático
+
+> Tecnologia moderna para processamento de documentos.
 `;
 
-converterMarkdownPDF(markdown, 'documento_web.pdf');
+converterMarkdown(markdown, 'documento_web.pdf', 'pdf');
+converterMarkdown(markdown, 'documento_web.docx', 'docx');
 ```
-
-## 🔧 Testando a API
-
-Execute o script de teste para verificar todas as funcionalidades:
-
-```bash
-python testar_api.py
-```
-
-Ou teste manualmente cada endpoint.
 
 ## ⚡ Formatos Suportados
 
-A API suporta os seguintes elementos Markdown:
+A API suporta os seguintes elementos Markdown em ambos PDF e Word:
 
-| Elemento | Sintaxe | Exemplo |
-|----------|---------|---------|
-| Título 1 | `# Texto` | # Título Principal |
-| Título 2 | `## Texto` | ## Subtítulo |
-| Título 3 | `### Texto` | ### Subsubtítulo |
-| Negrito | `**texto**` | **texto em negrito** |
-| Itálico | `*texto*` | *texto em itálico* |
-| Código inline | `` `código` `` | `print("hello")` |
-| Bloco de código | ``` ```código``` ``` | Bloco destacado |
-| Lista | `- item` | • Item da lista |
-| Lista numerada | `1. item` | 1. Item numerado |
-| Citação | `> texto` | Bloco de citação |
+| Elemento | Sintaxe | Exemplo | PDF | Word |
+|----------|---------|---------|-----|------|
+| Título 1 | `# Texto` | # Título Principal | ✅ | ✅ |
+| Título 2 | `## Texto` | ## Subtítulo | ✅ | ✅ |
+| Título 3 | `### Texto` | ### Subsubtítulo | ✅ | ✅ |
+| Negrito | `**texto**` | **texto em negrito** | ✅ | ✅ |
+| Itálico | `*texto*` | *texto em itálico* | ✅ | ✅ |
+| Código inline | `` `código` `` | `print("hello")` | ✅ | ✅ |
+| Bloco de código | ``` ```código``` ``` | Bloco destacado | ✅ | ✅ |
+| Lista | `- item` | • Item da lista | ✅ | ✅ |
+| Lista numerada | `1. item` | 1. Item numerado | ✅ | ✅ |
+| Citação | `> texto` | Bloco de citação | ✅ | ✅ |
 
 ## ❗ Tratamento de Erros
 
@@ -261,6 +364,17 @@ A API suporta os seguintes elementos Markdown:
 }
 ```
 
+## 📊 Comparação PDF vs Word
+
+| Aspecto | PDF | Word (.docx) |
+|---------|-----|-------------|
+| Fidelidade visual | ✅ Alta | ⚠️ Dependente do software |
+| Editabilidade | ❌ Limitada | ✅ Totalmente editável |
+| Tamanho do arquivo | 🔸 Médio | 🔹 Pequeno |
+| Compatibilidade | ✅ Universal | ✅ Ampla |
+| Formatação complexa | ✅ Excelente | ✅ Boa |
+| Uso recomendado | Documentos finais | Documentos de trabalho |
+
 ## 🔐 Considerações de Segurança
 
 - A API não faz autenticação por padrão
@@ -270,7 +384,8 @@ A API suporta os seguintes elementos Markdown:
 
 ## 📊 Performance
 
-- Conversões típicas: 50-500ms
+- Conversões PDF típicas: 50-500ms
+- Conversões Word típicas: 100-800ms
 - Tamanho máximo recomendado: 10MB de texto
 - Arquivos temporários são limpos automaticamente
 - Suporte a requisições concorrentes
@@ -283,7 +398,7 @@ A API suporta os seguintes elementos Markdown:
 netstat -an | findstr 9000
 
 # Verificar dependências
-pip list | findstr -i "flask reportlab markdown"
+pip list | findstr -i "flask reportlab markdown python-docx"
 ```
 
 ### Erro de conversão
@@ -295,6 +410,17 @@ pip list | findstr -i "flask reportlab markdown"
 - Garantir que o texto está em UTF-8
 - Verificar caracteres especiais no Markdown
 
+### Dependências em falta
+```bash
+# Instalar todas as dependências
+pip install flask reportlab markdown2 python-docx
+
+# Ou usar o requirements.txt
+pip install -r requirements.txt
+```
+
 ---
 
 **Pronto para usar! 🎉**
+
+Agora você pode converter Markdown tanto para PDF quanto para Word através da mesma API!
