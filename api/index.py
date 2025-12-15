@@ -16,13 +16,19 @@ sys.path.insert(0, current_dir)
 
 try:
     from markdown_to_pdf_reportlab import MarkdownToPDFReportLab
+    from markdown_to_docx import MarkdownToDocx
 except ImportError:
-    # Se não conseguir importar, cria um placeholder
+    # Se não conseguir importar, cria placeholders
     class MarkdownToPDFReportLab:
         def __init__(self):
             pass
         def markdown_text_to_pdf(self, text, path):
-            # Placeholder - vai tentar instalar as dependências depois
+            return False
+    
+    class MarkdownToDocx:
+        def __init__(self):
+            pass
+        def markdown_text_to_docx(self, text, path):
             return False
 
 class handler(BaseHTTPRequestHandler):
@@ -45,14 +51,15 @@ class handler(BaseHTTPRequestHandler):
         if path in ['/', '/verificar']:
             response = {
                 "status": "ok",
-                "message": "API Markdown para PDF funcionando no Vercel!",
+                "message": "API Markdown para PDF e Word funcionando no Vercel!",
                 "timestamp": datetime.now().isoformat(),
                 "path": path,
                 "method": "GET",
                 "rotas_disponiveis": [
                     "GET / - Status da API",
                     "GET /verificar - Verificação de saúde",
-                    "POST /converter-markdown-pdf-base64 - Converter Markdown para PDF"
+                    "POST /converter-markdown-pdf-base64 - Converter Markdown para PDF",
+                    "POST /converter-markdown-docx-base64 - Converter Markdown para Word"
                 ]
             }
         else:
@@ -61,7 +68,12 @@ class handler(BaseHTTPRequestHandler):
             response = {
                 "status": "erro",
                 "message": f"Rota não encontrada: {path}",
-                "rotas_disponiveis": ["/", "/verificar", "/converter-markdown-pdf-base64"]
+                "rotas_disponiveis": [
+                    "/", 
+                    "/verificar", 
+                    "/converter-markdown-pdf-base64",
+                    "/converter-markdown-docx-base64"
+                ]
             }
         
         # Envia resposta
@@ -83,14 +95,21 @@ class handler(BaseHTTPRequestHandler):
             else:
                 data = {}
             
-            # Rota de conversão
+            # Rotas de conversão
             if path == '/converter-markdown-pdf-base64':
-                response = self.handle_conversion(data)
+                response = self.handle_pdf_conversion(data)
+                status_code = response.get('status_code', 200)
+            elif path == '/converter-markdown-docx-base64':
+                response = self.handle_docx_conversion(data)
                 status_code = response.get('status_code', 200)
             else:
                 response = {
                     "status": "erro",
-                    "message": f"Rota POST não encontrada: {path}"
+                    "message": f"Rota POST não encontrada: {path}",
+                    "rotas_disponiveis": [
+                        "/converter-markdown-pdf-base64",
+                        "/converter-markdown-docx-base64"
+                    ]
                 }
                 status_code = 404
             
@@ -111,6 +130,7 @@ class handler(BaseHTTPRequestHandler):
         except Exception as e:
             self.send_response(500)
             self.send_header('Content-type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             
             error_response = {
@@ -127,22 +147,42 @@ class handler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
     
-    def handle_conversion(self, data):
+    def install_dependencies(self, packages):
+        """Tenta instalar dependências necessárias"""
+        try:
+            import subprocess
+            subprocess.check_call([
+                sys.executable, '-m', 'pip', 'install'
+            ] + packages, timeout=60)
+            return True
+        except Exception as e:
+            return False
+    
+    def handle_pdf_conversion(self, data):
         """Handle markdown to PDF conversion"""
         try:
-            # Tenta importar novamente se necessário
+            # Tenta garantir que as dependências estão instaladas
             global MarkdownToPDFReportLab
-            if not hasattr(MarkdownToPDFReportLab, 'markdown_text_to_pdf') or \
-               MarkdownToPDFReportLab().markdown_text_to_pdf("test", "/tmp/test") == False:
-                try:
-                    import subprocess
-                    subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'reportlab==4.2.2', 'markdown2==2.5.0'])
-                    # Reimporta após instalar
-                    from markdown_to_pdf_reportlab import MarkdownToPDFReportLab
-                except Exception as install_error:
+            try:
+                # Testa se a classe funciona
+                test_converter = MarkdownToPDFReportLab()
+                if not hasattr(test_converter, 'markdown_text_to_pdf'):
+                    raise ImportError("Classe não funcional")
+            except:
+                # Tenta instalar dependências
+                if self.install_dependencies(['reportlab==4.4.6', 'markdown2==2.5.4']):
+                    try:
+                        from markdown_to_pdf_reportlab import MarkdownToPDFReportLab
+                    except ImportError as e:
+                        return {
+                            "status": "erro",
+                            "message": f"Erro ao importar após instalação: {str(e)}",
+                            "status_code": 500
+                        }
+                else:
                     return {
                         "status": "erro",
-                        "message": f"Erro ao instalar dependências: {str(install_error)}",
+                        "message": "Não foi possível instalar as dependências para PDF",
                         "status_code": 500
                     }
             
@@ -203,7 +243,96 @@ class handler(BaseHTTPRequestHandler):
             
             return {
                 "status": "erro",
-                "message": f"Erro na conversão: {str(e)}",
+                "message": f"Erro na conversão PDF: {str(e)}",
+                "status_code": 500
+            }
+    
+    def handle_docx_conversion(self, data):
+        """Handle markdown to Word conversion"""
+        try:
+            # Tenta garantir que as dependências estão instaladas
+            global MarkdownToDocx
+            try:
+                # Testa se a classe funciona
+                test_converter = MarkdownToDocx()
+                if not hasattr(test_converter, 'markdown_text_to_docx'):
+                    raise ImportError("Classe não funcional")
+            except:
+                # Tenta instalar dependências
+                if self.install_dependencies(['python-docx==1.1.2', 'markdown2==2.5.4']):
+                    try:
+                        from markdown_to_docx import MarkdownToDocx
+                    except ImportError as e:
+                        return {
+                            "status": "erro",
+                            "message": f"Erro ao importar após instalação: {str(e)}",
+                            "status_code": 500
+                        }
+                else:
+                    return {
+                        "status": "erro",
+                        "message": "Não foi possível instalar as dependências para Word",
+                        "status_code": 500
+                    }
+            
+            # Validação
+            if not data or 'texto_markdown' not in data or not data['texto_markdown']:
+                return {
+                    "status": "erro",
+                    "message": "Campo 'texto_markdown' é obrigatório e não pode estar vazio",
+                    "status_code": 400
+                }
+            
+            texto_markdown = data['texto_markdown']
+            nome_arquivo = data.get('nome_arquivo', f'documento_{uuid.uuid4().hex[:8]}.docx')
+            
+            if not nome_arquivo.endswith('.docx'):
+                nome_arquivo += '.docx'
+            
+            # Arquivo temporário
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as temp_file:
+                temp_path = temp_file.name
+            
+            # Converte
+            converter = MarkdownToDocx()
+            sucesso = converter.markdown_text_to_docx(texto_markdown, temp_path)
+            
+            if not sucesso:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+                return {
+                    "status": "erro",
+                    "message": "Falha na conversão do Markdown para Word",
+                    "status_code": 500
+                }
+            
+            # Lê e converte para base64
+            with open(temp_path, 'rb') as docx_file:
+                docx_content = docx_file.read()
+                docx_base64 = base64.b64encode(docx_content).decode('utf-8')
+            
+            os.unlink(temp_path)
+            
+            return {
+                "status": "sucesso",
+                "nome_arquivo": nome_arquivo,
+                "docx_base64": docx_base64,
+                "tamanho": len(docx_content),
+                "timestamp": datetime.now().isoformat(),
+                "status_code": 200
+            }
+            
+        except Exception as e:
+            # Limpa arquivo temporário se houver erro
+            try:
+                if 'temp_path' in locals() and os.path.exists(temp_path):
+                    os.unlink(temp_path)
+            except:
+                pass
+            
+            return {
+                "status": "erro",
+                "message": f"Erro na conversão Word: {str(e)}",
                 "status_code": 500
             }
 
@@ -212,4 +341,9 @@ if __name__ == "__main__":
     from http.server import HTTPServer
     server = HTTPServer(('localhost', 8000), handler)
     print("Servidor rodando em http://localhost:8000")
+    print("Rotas disponíveis:")
+    print("  GET  / - Status da API")
+    print("  GET  /verificar - Health check")
+    print("  POST /converter-markdown-pdf-base64 - Converter para PDF")
+    print("  POST /converter-markdown-docx-base64 - Converter para Word")
     server.serve_forever()
