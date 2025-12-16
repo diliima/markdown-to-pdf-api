@@ -17,6 +17,7 @@ sys.path.insert(0, current_dir)
 try:
     from markdown_to_pdf_reportlab import MarkdownToPDFReportLab
     from markdown_to_docx import MarkdownToDocx
+    from json_to_excel import JsonToExcel
 except ImportError:
     # Se não conseguir importar, cria placeholders
     class MarkdownToPDFReportLab:
@@ -30,6 +31,14 @@ except ImportError:
             pass
         def markdown_text_to_docx(self, text, path):
             return False
+    
+    class JsonToExcel:
+        def __init__(self):
+            pass
+        def json_to_excel_file(self, data, path, sheet_name, apply_formatting):
+            return False
+        def validate_json_data(self, data):
+            return False, "Classe não funcional"
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -51,7 +60,7 @@ class handler(BaseHTTPRequestHandler):
         if path in ['/', '/verificar']:
             response = {
                 "status": "ok",
-                "message": "API Markdown para PDF e Word funcionando no Vercel!",
+                "message": "API Markdown para PDF, Word e Excel funcionando no Vercel!",
                 "timestamp": datetime.now().isoformat(),
                 "path": path,
                 "method": "GET",
@@ -59,7 +68,8 @@ class handler(BaseHTTPRequestHandler):
                     "GET / - Status da API",
                     "GET /verificar - Verificação de saúde",
                     "POST /converter-markdown-pdf-base64 - Converter Markdown para PDF",
-                    "POST /converter-markdown-docx-base64 - Converter Markdown para Word"
+                    "POST /converter-markdown-docx-base64 - Converter Markdown para Word",
+                    "POST /converter-json-excel-base64 - Converter JSON para Excel"
                 ]
             }
         else:
@@ -72,7 +82,8 @@ class handler(BaseHTTPRequestHandler):
                     "/", 
                     "/verificar", 
                     "/converter-markdown-pdf-base64",
-                    "/converter-markdown-docx-base64"
+                    "/converter-markdown-docx-base64",
+                    "/converter-json-excel-base64"
                 ]
             }
         
@@ -102,13 +113,17 @@ class handler(BaseHTTPRequestHandler):
             elif path == '/converter-markdown-docx-base64':
                 response = self.handle_docx_conversion(data)
                 status_code = response.get('status_code', 200)
+            elif path == '/converter-json-excel-base64':
+                response = self.handle_excel_conversion(data)
+                status_code = response.get('status_code', 200)
             else:
                 response = {
                     "status": "erro",
                     "message": f"Rota POST não encontrada: {path}",
                     "rotas_disponiveis": [
                         "/converter-markdown-pdf-base64",
-                        "/converter-markdown-docx-base64"
+                        "/converter-markdown-docx-base64",
+                        "/converter-json-excel-base64"
                     ]
                 }
                 status_code = 404
@@ -153,7 +168,7 @@ class handler(BaseHTTPRequestHandler):
             import subprocess
             subprocess.check_call([
                 sys.executable, '-m', 'pip', 'install'
-            ] + packages, timeout=60)
+            ] + packages, timeout=90)
             return True
         except Exception as e:
             return False
@@ -335,6 +350,113 @@ class handler(BaseHTTPRequestHandler):
                 "message": f"Erro na conversão Word: {str(e)}",
                 "status_code": 500
             }
+    
+    def handle_excel_conversion(self, data):
+        """Handle JSON to Excel conversion"""
+        try:
+            # Tenta garantir que as dependências estão instaladas
+            global JsonToExcel
+            try:
+                # Testa se a classe funciona
+                test_converter = JsonToExcel()
+                if not hasattr(test_converter, 'json_to_excel_file'):
+                    raise ImportError("Classe não funcional")
+            except:
+                # Tenta instalar dependências
+                if self.install_dependencies(['pandas==2.2.0', 'openpyxl==3.1.5']):
+                    try:
+                        from json_to_excel import JsonToExcel
+                    except ImportError as e:
+                        return {
+                            "status": "erro",
+                            "message": f"Erro ao importar após instalação: {str(e)}",
+                            "status_code": 500
+                        }
+                else:
+                    return {
+                        "status": "erro",
+                        "message": "Não foi possível instalar as dependências para Excel",
+                        "status_code": 500
+                    }
+            
+            # Validação
+            if not data or 'dados_json' not in data or not data['dados_json']:
+                return {
+                    "status": "erro",
+                    "message": "Campo 'dados_json' é obrigatório e não pode estar vazio",
+                    "status_code": 400
+                }
+            
+            dados_json = data['dados_json']
+            nome_arquivo = data.get('nome_arquivo', f'planilha_{uuid.uuid4().hex[:8]}.xlsx')
+            nome_aba = data.get('nome_aba', 'Dados')
+            aplicar_formatacao = data.get('aplicar_formatacao', True)
+            
+            if not nome_arquivo.endswith('.xlsx'):
+                nome_arquivo += '.xlsx'
+            
+            # Arquivo temporário
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as temp_file:
+                temp_path = temp_file.name
+            
+            # Converte JSON para Excel
+            converter = JsonToExcel()
+            
+            # Valida os dados primeiro
+            is_valid, error_msg = converter.validate_json_data(dados_json)
+            if not is_valid:
+                return {
+                    "status": "erro",
+                    "message": f"Dados JSON inválidos: {error_msg}",
+                    "status_code": 400
+                }
+            
+            sucesso = converter.json_to_excel_file(
+                dados_json, 
+                temp_path, 
+                nome_aba, 
+                aplicar_formatacao
+            )
+            
+            if not sucesso:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+                return {
+                    "status": "erro",
+                    "message": "Falha na conversão do JSON para Excel",
+                    "status_code": 500
+                }
+            
+            # Lê e converte para base64
+            with open(temp_path, 'rb') as excel_file:
+                excel_content = excel_file.read()
+                excel_base64 = base64.b64encode(excel_content).decode('utf-8')
+            
+            os.unlink(temp_path)
+            
+            return {
+                "status": "sucesso",
+                "nome_arquivo": nome_arquivo,
+                "excel_base64": excel_base64,
+                "tamanho": len(excel_content),
+                "registros": len(dados_json),
+                "timestamp": datetime.now().isoformat(),
+                "status_code": 200
+            }
+            
+        except Exception as e:
+            # Limpa arquivo temporário se houver erro
+            try:
+                if 'temp_path' in locals() and os.path.exists(temp_path):
+                    os.unlink(temp_path)
+            except:
+                pass
+            
+            return {
+                "status": "erro",
+                "message": f"Erro na conversão Excel: {str(e)}",
+                "status_code": 500
+            }
 
 # Para desenvolvimento local
 if __name__ == "__main__":
@@ -346,4 +468,5 @@ if __name__ == "__main__":
     print("  GET  /verificar - Health check")
     print("  POST /converter-markdown-pdf-base64 - Converter para PDF")
     print("  POST /converter-markdown-docx-base64 - Converter para Word")
+    print("  POST /converter-json-excel-base64 - Converter para Excel")
     server.serve_forever()
