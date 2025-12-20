@@ -54,23 +54,65 @@ class DocxToPdf:
             alignment=TA_JUSTIFY
         ))
     
+    def _escape_special_chars(self, text):
+        """Escapa caracteres especiais para ReportLab"""
+        if not text:
+            return ""
+        
+        # Garante que é uma string
+        if not isinstance(text, str):
+            text = str(text)
+        
+        # Escapa caracteres XML/HTML
+        import html
+        escaped = html.escape(text)
+        
+        # Remove ou substitui caracteres problemáticos
+        escaped = escaped.replace('\x91', "'")  # Apostrofe curvo esquerdo
+        escaped = escaped.replace('\x92', "'")  # Apostrofe curvo direito  
+        escaped = escaped.replace('\x93', '"')  # Aspas curvas esquerdas
+        escaped = escaped.replace('\x94', '"')  # Aspas curvas direitas
+        escaped = escaped.replace('\x96', '-')  # Hífen longo
+        escaped = escaped.replace('\x97', '--') # Hífen extra longo
+        
+        return escaped
+    
     def extract_text_from_docx(self, docx_path):
         """Extrai texto de um arquivo DOCX"""
         try:
-            doc = Document(docx_path)
+            # Verifica se o arquivo existe e é válido
+            if not os.path.exists(docx_path):
+                logging.error(f"Arquivo não encontrado: {docx_path}")
+                return None
+                
+            # Tenta abrir o documento
+            try:
+                doc = Document(docx_path)
+            except Exception as e:
+                logging.error(f"Erro ao abrir documento DOCX: {str(e)}")
+                return None
+                
             text_content = []
+            
+            # Adiciona conteúdo padrão se documento estiver vazio
+            if not doc.paragraphs and not doc.tables:
+                text_content.append(('normal', 'Documento convertido de DOCX'))
+                return text_content
             
             for paragraph in doc.paragraphs:
                 if paragraph.text.strip():
+                    # Limpa o texto para evitar problemas de encoding
+                    clean_text = paragraph.text.encode('utf-8', errors='ignore').decode('utf-8')
+                    
                     # Verifica o estilo do parágrafo para determinar formatação
                     style_name = paragraph.style.name.lower()
                     
                     if 'title' in style_name:
-                        text_content.append(('title', paragraph.text))
+                        text_content.append(('title', clean_text))
                     elif 'heading' in style_name:
-                        text_content.append(('heading', paragraph.text))
+                        text_content.append(('heading', clean_text))
                     else:
-                        text_content.append(('normal', paragraph.text))
+                        text_content.append(('normal', clean_text))
             
             # Processa tabelas se existirem
             for table in doc.tables:
@@ -78,7 +120,9 @@ class DocxToPdf:
                 for row in table.rows:
                     row_data = []
                     for cell in row.cells:
-                        row_data.append(cell.text.strip())
+                        # Limpa o texto da célula
+                        clean_cell_text = cell.text.strip().encode('utf-8', errors='ignore').decode('utf-8')
+                        row_data.append(clean_cell_text)
                     table_data.append(row_data)
                 if table_data:
                     text_content.append(('table', table_data))
@@ -100,21 +144,31 @@ class DocxToPdf:
             
             for content_type, data in content:
                 if content_type == 'title':
-                    story.append(Paragraph(data, self.styles['CustomTitle']))
+                    # Escapa caracteres especiais para ReportLab
+                    safe_text = self._escape_special_chars(data)
+                    story.append(Paragraph(safe_text, self.styles['CustomTitle']))
                     story.append(Spacer(1, 12))
                     
                 elif content_type == 'heading':
-                    story.append(Paragraph(data, self.styles['CustomHeading']))
+                    safe_text = self._escape_special_chars(data)
+                    story.append(Paragraph(safe_text, self.styles['CustomHeading']))
                     story.append(Spacer(1, 6))
                     
                 elif content_type == 'normal':
-                    story.append(Paragraph(data, self.styles['CustomNormal']))
+                    safe_text = self._escape_special_chars(data)
+                    story.append(Paragraph(safe_text, self.styles['CustomNormal']))
                     story.append(Spacer(1, 6))
                     
                 elif content_type == 'table':
                     # Cria tabela no PDF
                     if data and len(data) > 0:
-                        table = Table(data)
+                        # Processa dados da tabela para escapar caracteres especiais
+                        safe_table_data = []
+                        for row in data:
+                            safe_row = [self._escape_special_chars(cell) for cell in row]
+                            safe_table_data.append(safe_row)
+                            
+                        table = Table(safe_table_data)
                         table.setStyle(TableStyle([
                             ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
                             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),

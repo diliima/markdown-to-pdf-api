@@ -107,13 +107,26 @@ class handler(BaseHTTPRequestHandler):
         path = parsed_path.path
         
         try:
-            # Lê o body da requisição
-            content_length = int(self.headers['Content-Length']) if 'Content-Length' in self.headers else 0
-            if content_length > 0:
-                post_data = self.rfile.read(content_length)
-                data = json.loads(post_data.decode('utf-8'))
+            # Verifica o tipo de conteúdo
+            content_type = self.headers.get('Content-Type', '')
+            
+            if 'multipart/form-data' in content_type:
+                # Processa multipart/form-data
+                import cgi
+                form = cgi.FieldStorage(
+                    fp=self.rfile,
+                    headers=self.headers,
+                    environ={'REQUEST_METHOD': 'POST'}
+                )
+                data = self._parse_multipart_data(form)
             else:
-                data = {}
+                # Processa JSON
+                content_length = int(self.headers['Content-Length']) if 'Content-Length' in self.headers else 0
+                if content_length > 0:
+                    post_data = self.rfile.read(content_length)
+                    data = json.loads(post_data.decode('utf-8'))
+                else:
+                    data = {}
             
             # Rotas de conversão
             if path == '/converter-markdown-pdf-base64':
@@ -174,6 +187,31 @@ class handler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
+    
+    def _parse_multipart_data(self, form):
+        """Parse multipart/form-data"""
+        data = {}
+        
+        for field_name in form.keys():
+            field = form[field_name]
+            
+            if hasattr(field, 'file') and field.file:
+                # É um arquivo
+                file_content = field.file.read()
+                if isinstance(file_content, bytes):
+                    # Converte arquivo para base64 
+                    import base64
+                    data['arquivo_base64'] = base64.b64encode(file_content).decode('utf-8')
+                    if hasattr(field, 'filename') and field.filename:
+                        data['nome_arquivo_original'] = field.filename
+            else:
+                # É um campo de texto
+                if hasattr(field, 'value'):
+                    data[field_name] = field.value
+                else:
+                    data[field_name] = str(field)
+        
+        return data
     
     def install_dependencies(self, packages):
         """Tenta instalar dependências necessárias"""
@@ -525,6 +563,15 @@ class handler(BaseHTTPRequestHandler):
             # Decodifica o arquivo base64
             try:
                 arquivo_content = base64.b64decode(arquivo_base64)
+                
+                # Verifica se o conteúdo parece ser um arquivo DOCX válido
+                if not arquivo_content.startswith(b'PK'):
+                    return {
+                        "status": "erro",
+                        "message": "O arquivo enviado não parece ser um arquivo DOCX válido",
+                        "status_code": 400
+                    }
+                    
             except Exception as e:
                 return {
                     "status": "erro",
