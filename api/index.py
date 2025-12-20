@@ -8,6 +8,13 @@ import uuid
 from datetime import datetime
 import urllib.parse
 
+# Import do cgi - pode não estar disponível em algumas versões
+try:
+    import cgi
+    CGI_AVAILABLE = True
+except ImportError:
+    CGI_AVAILABLE = False
+
 # Adiciona o diretório pai ao path para importar o módulo
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -112,13 +119,16 @@ class handler(BaseHTTPRequestHandler):
             
             if 'multipart/form-data' in content_type:
                 # Processa multipart/form-data
-                import cgi
-                form = cgi.FieldStorage(
-                    fp=self.rfile,
-                    headers=self.headers,
-                    environ={'REQUEST_METHOD': 'POST'}
-                )
-                data = self._parse_multipart_data(form)
+                if CGI_AVAILABLE:
+                    form = cgi.FieldStorage(
+                        fp=self.rfile,
+                        headers=self.headers,
+                        environ={'REQUEST_METHOD': 'POST'}
+                    )
+                    data = self._parse_multipart_data(form)
+                else:
+                    # Fallback: processa como raw data 
+                    data = self._parse_multipart_raw(content_type)
             else:
                 # Processa JSON
                 content_length = int(self.headers['Content-Length']) if 'Content-Length' in self.headers else 0
@@ -200,7 +210,6 @@ class handler(BaseHTTPRequestHandler):
                 file_content = field.file.read()
                 if isinstance(file_content, bytes):
                     # Converte arquivo para base64 
-                    import base64
                     data['arquivo_base64'] = base64.b64encode(file_content).decode('utf-8')
                     if hasattr(field, 'filename') and field.filename:
                         data['nome_arquivo_original'] = field.filename
@@ -211,6 +220,75 @@ class handler(BaseHTTPRequestHandler):
                 else:
                     data[field_name] = str(field)
         
+        return data
+    
+    def _parse_multipart_raw(self, content_type):
+        """Parse multipart/form-data manualmente (fallback)"""
+        data = {}
+        
+        try:
+            # Extrai boundary do content-type
+            boundary = None
+            if 'boundary=' in content_type:
+                boundary = content_type.split('boundary=')[1].strip()
+                if boundary.startswith('"') and boundary.endswith('"'):
+                    boundary = boundary[1:-1]
+            
+            if not boundary:
+                return data
+            
+            # Lê todo o conteúdo
+            content_length = int(self.headers.get('Content-Length', 0))
+            if content_length == 0:
+                return data
+                
+            raw_data = self.rfile.read(content_length)
+            
+            # Divide pelos boundaries
+            boundary_bytes = ('--' + boundary).encode('utf-8')
+            parts = raw_data.split(boundary_bytes)
+            
+            for part in parts:
+                if not part.strip() or part.strip() == b'--':
+                    continue
+                    
+                # Separa headers do conteúdo
+                if b'\r\n\r\n' in part:
+                    headers_section, content_section = part.split(b'\r\n\r\n', 1)
+                elif b'\n\n' in part:
+                    headers_section, content_section = part.split(b'\n\n', 1)
+                else:
+                    continue
+                
+                # Parse dos headers
+                headers_text = headers_section.decode('utf-8', errors='ignore')
+                field_name = None
+                is_file = False
+                
+                for header_line in headers_text.split('\n'):
+                    if 'Content-Disposition:' in header_line and 'form-data' in header_line:
+                        # Extrai o nome do campo
+                        if 'name="' in header_line:
+                            name_start = header_line.find('name="') + 6
+                            name_end = header_line.find('"', name_start)
+                            field_name = header_line[name_start:name_end]
+                        
+                        # Verifica se é arquivo
+                        if 'filename=' in header_line:
+                            is_file = True
+                
+                if field_name:
+                    if is_file:
+                        # Converte arquivo para base64
+                        data['arquivo_base64'] = base64.b64encode(content_section).decode('utf-8')
+                    else:
+                        # Campo de texto
+                        data[field_name] = content_section.decode('utf-8', errors='ignore').strip()
+                        
+        except Exception as e:
+            # Se falhar, retorna dados vazios 
+            pass
+            
         return data
     
     def install_dependencies(self, packages):
