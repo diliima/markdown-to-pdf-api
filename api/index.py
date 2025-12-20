@@ -18,6 +18,7 @@ try:
     from markdown_to_pdf_reportlab import MarkdownToPDFReportLab
     from markdown_to_docx import MarkdownToDocx
     from json_to_excel import JsonToExcel
+    from docx_to_pdf import DocxToPdf
 except ImportError:
     # Se não conseguir importar, cria placeholders
     class MarkdownToPDFReportLab:
@@ -39,6 +40,12 @@ except ImportError:
             return False
         def validate_json_data(self, data):
             return False, "Classe não funcional"
+    
+    class DocxToPdf:
+        def __init__(self):
+            pass
+        def convert_docx_content_to_pdf(self, content, path):
+            return False
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -69,7 +76,8 @@ class handler(BaseHTTPRequestHandler):
                     "GET /verificar - Verificação de saúde",
                     "POST /converter-markdown-pdf-base64 - Converter Markdown para PDF",
                     "POST /converter-markdown-docx-base64 - Converter Markdown para Word",
-                    "POST /converter-json-excel-base64 - Converter JSON para Excel"
+                    "POST /converter-json-excel-base64 - Converter JSON para Excel",
+                    "POST /converter-docx-pdf-base64 - Converter DOCX/DOC para PDF"
                 ]
             }
         else:
@@ -83,7 +91,8 @@ class handler(BaseHTTPRequestHandler):
                     "/verificar", 
                     "/converter-markdown-pdf-base64",
                     "/converter-markdown-docx-base64",
-                    "/converter-json-excel-base64"
+                    "/converter-json-excel-base64",
+                    "/converter-docx-pdf-base64"
                 ]
             }
         
@@ -116,6 +125,9 @@ class handler(BaseHTTPRequestHandler):
             elif path == '/converter-json-excel-base64':
                 response = self.handle_excel_conversion(data)
                 status_code = response.get('status_code', 200)
+            elif path == '/converter-docx-pdf-base64':
+                response = self.handle_docx_to_pdf_conversion(data)
+                status_code = response.get('status_code', 200)
             else:
                 response = {
                     "status": "erro",
@@ -123,7 +135,8 @@ class handler(BaseHTTPRequestHandler):
                     "rotas_disponiveis": [
                         "/converter-markdown-pdf-base64",
                         "/converter-markdown-docx-base64",
-                        "/converter-json-excel-base64"
+                        "/converter-json-excel-base64",
+                        "/converter-docx-pdf-base64"
                     ]
                 }
                 status_code = 404
@@ -455,6 +468,119 @@ class handler(BaseHTTPRequestHandler):
             return {
                 "status": "erro",
                 "message": f"Erro na conversão Excel: {str(e)}",
+                "status_code": 500
+            }
+
+    def handle_docx_to_pdf_conversion(self, data):
+        """Handle DOCX to PDF conversion"""
+        try:
+            # Tenta garantir que as dependências estão instaladas
+            global DocxToPdf
+            try:
+                # Testa se a classe funciona
+                test_converter = DocxToPdf()
+                if not hasattr(test_converter, 'convert_docx_content_to_pdf'):
+                    raise ImportError("Classe não funcional")
+            except:
+                # Tenta instalar dependências
+                if self.install_dependencies(['python-docx==1.2.0', 'reportlab==4.4.6']):
+                    try:
+                        from docx_to_pdf import DocxToPdf
+                    except ImportError as e:
+                        return {
+                            "status": "erro",
+                            "message": f"Erro ao importar DocxToPdf após instalação: {str(e)}",
+                            "status_code": 500
+                        }
+                else:
+                    return {
+                        "status": "erro", 
+                        "message": "Falha ao instalar dependências necessárias (python-docx, reportlab)",
+                        "status_code": 500
+                    }
+            
+            # Validação dos dados de entrada
+            if not isinstance(data, dict):
+                return {
+                    "status": "erro",
+                    "message": "Dados devem ser um objeto JSON",
+                    "status_code": 400
+                }
+            
+            if 'arquivo_base64' not in data:
+                return {
+                    "status": "erro",
+                    "message": "Campo 'arquivo_base64' é obrigatório",
+                    "status_code": 400
+                }
+            
+            arquivo_base64 = data['arquivo_base64']
+            if not arquivo_base64:
+                return {
+                    "status": "erro",
+                    "message": "Campo 'arquivo_base64' não pode estar vazio",
+                    "status_code": 400
+                }
+            
+            # Decodifica o arquivo base64
+            try:
+                arquivo_content = base64.b64decode(arquivo_base64)
+            except Exception as e:
+                return {
+                    "status": "erro",
+                    "message": f"Erro ao decodificar arquivo base64: {str(e)}",
+                    "status_code": 400
+                }
+            
+            nome_arquivo = data.get('nome_arquivo', f'documento_{uuid.uuid4().hex[:8]}.pdf')
+            
+            if not nome_arquivo.endswith('.pdf'):
+                nome_arquivo += '.pdf'
+            
+            # Arquivo temporário para o PDF
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+                temp_path = temp_file.name
+            
+            # Converte DOCX para PDF
+            converter = DocxToPdf()
+            sucesso = converter.convert_docx_content_to_pdf(arquivo_content, temp_path)
+            
+            if not sucesso:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+                return {
+                    "status": "erro",
+                    "message": "Falha na conversão do DOCX para PDF",
+                    "status_code": 500
+                }
+            
+            # Lê e converte para base64
+            with open(temp_path, 'rb') as pdf_file:
+                pdf_content = pdf_file.read()
+                pdf_base64 = base64.b64encode(pdf_content).decode('utf-8')
+            
+            os.unlink(temp_path)
+            
+            return {
+                "status": "sucesso",
+                "nome_arquivo": nome_arquivo,
+                "pdf_base64": pdf_base64,
+                "tamanho": len(pdf_content),
+                "timestamp": datetime.now().isoformat(),
+                "status_code": 200
+            }
+            
+        except Exception as e:
+            # Limpa arquivo temporário se houver erro
+            try:
+                if 'temp_path' in locals() and os.path.exists(temp_path):
+                    os.unlink(temp_path)
+            except:
+                pass
+            
+            return {
+                "status": "erro",
+                "message": f"Erro na conversão DOCX para PDF: {str(e)}",
                 "status_code": 500
             }
 

@@ -1,8 +1,8 @@
-# API de Conversão Markdown para PDF e Word
+# API de Conversão Markdown para PDF e Word + DOCX para PDF
 
 ## 🚀 Visão Geral
 
-Esta API Flask permite converter texto Markdown em arquivos PDF ou Word (.docx) através de requisições HTTP. Oferece duas modalidades de retorno: download direto ou dados em base64.
+Esta API Flask permite converter texto Markdown em arquivos PDF ou Word (.docx), e também converter arquivos DOC/DOCX para PDF através de requisições HTTP. Oferece duas modalidades de retorno: download direto ou dados em base64.
 
 ## 📡 Endpoints Disponíveis
 
@@ -97,6 +97,54 @@ Converte Markdown para Word (.docx) e retorna os dados em base64.
     "nome_arquivo": "documento.docx",
     "docx_base64": "UEsDBBQABgAIAAAAIQD...",
     "tamanho": 4096
+}
+```
+
+### 6. Conversão DOCX/DOC para PDF com Download
+**POST** `/converter-docx-pdf`
+
+Converte arquivo DOCX ou DOC para PDF e retorna o arquivo para download.
+
+**Body (multipart/form-data):**
+- `arquivo`: arquivo DOCX ou DOC
+- `nome_arquivo`: nome do arquivo PDF de saída (opcional)
+
+**Exemplo com curl:**
+```bash
+curl -X POST http://localhost:9000/converter-docx-pdf \
+  -F "arquivo=@documento.docx" \
+  -F "nome_arquivo=meu_documento.pdf" \
+  -o resultado.pdf
+```
+
+**Resposta:** 
+- **200**: Arquivo PDF para download
+- **400**: Erro de validação
+- **500**: Erro interno
+
+### 7. Conversão DOCX/DOC para PDF com Base64
+**POST** `/converter-docx-pdf-base64`
+
+Converte arquivo DOCX ou DOC para PDF e retorna os dados em base64.
+
+**Body (multipart/form-data):**
+- `arquivo`: arquivo DOCX ou DOC
+- `nome_arquivo`: nome do arquivo PDF de saída (opcional)
+
+**Exemplo com curl:**
+```bash
+curl -X POST http://localhost:9000/converter-docx-pdf-base64 \
+  -F "arquivo=@documento.docx" \
+  -F "nome_arquivo=meu_documento.pdf"
+```
+
+**Resposta (200):**
+```json
+{
+    "status": "sucesso",
+    "nome_arquivo": "meu_documento.pdf",
+    "pdf_base64": "JVBERi0xLjQKJdPr6eEKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PgplbmRvYmoKMyAwIG9iago8PC9UeXBlL1BhZ2UvTWVkaWFCb3hbMCAwIDYxMiA3OTJdL1BhcmVudCAyIDAgUi9SZXNvdXJjZXM8PC9Gb250PDwvRjEgNCAwIFI+Pj4+L0NvbnRlbnRzIDUgMCBSPj4KZW5kb2JqCjQgMCBvYmoKPDwvVHlwZS9Gb250L1N1YnR5cGUvVHlwZTEvQmFzZUZvbnQvSGVsdmV0aWNhPj4KZW5kb2JqCjUgMCBvYmoKPDwvTGVuZ3RoIDQ0Pj4Kc3RyZWFtCkJUCi9GMSAxMiBUZgoyIDc1MiBUZAooSGVsbG8gV29ybGQhKSBUagpFVApzdHJlYW0KZW5kc3RyZWFtCmVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1OCAwMDAwMCBuIAowMDAwMDAwMTE1IDAwMDAwIG4gCjAwMDAwMDAyMzcgMDAwMDAgbiAKMDAwMDAwMDMwNiAwMDAwMCBuIAp0cmFpbGVyCjw8L1NpemUgNi9Sb290IDEgMCBSPj4Kc3RhcnR4cmVmCjM3NQolJUVPRgo=",
+    "tamanho": 1024
 }
 ```
 
@@ -213,6 +261,43 @@ if response.status_code == 200:
     with open('relatorio_base64.docx', 'wb') as f:
         f.write(docx_bytes)
     print(f"Word salvo: {data['nome_arquivo']} ({data['tamanho']} bytes)")
+
+# === CONVERSÃO DOCX/DOC PARA PDF ===
+
+# Opção 5: DOCX para PDF - Download direto
+with open('documento.docx', 'rb') as file:
+    files = {'arquivo': file}
+    data = {'nome_arquivo': 'convertido.pdf'}
+    
+    response = requests.post(
+        'http://localhost:9000/converter-docx-pdf',
+        files=files,
+        data=data
+    )
+    
+    if response.status_code == 200:
+        with open('convertido.pdf', 'wb') as f:
+            f.write(response.content)
+        print("DOCX convertido para PDF com sucesso!")
+
+# Opção 6: DOCX para PDF - Base64
+with open('documento.docx', 'rb') as file:
+    files = {'arquivo': file}
+    data = {'nome_arquivo': 'convertido.pdf'}
+    
+    response = requests.post(
+        'http://localhost:9000/converter-docx-pdf-base64',
+        files=files,
+        data=data
+    )
+    
+    if response.status_code == 200:
+        data = response.json()
+        pdf_bytes = base64.b64decode(data['pdf_base64'])
+        
+        with open('convertido_base64.pdf', 'wb') as f:
+            f.write(pdf_bytes)
+        print(f"PDF salvo: {data['nome_arquivo']} ({data['tamanho']} bytes)")
 ```
 
 ### 3. Exemplo com curl
@@ -229,6 +314,17 @@ curl -X POST http://localhost:9000/converter-markdown-docx \
   -H "Content-Type: application/json" \
   -d '{"texto_markdown":"# Título\n\nConteúdo **formatado**.","nome_arquivo":"teste.docx"}' \
   --output teste.docx
+
+# DOCX para PDF - Download direto
+curl -X POST http://localhost:9000/converter-docx-pdf \
+  -F "arquivo=@documento.docx" \
+  -F "nome_arquivo=convertido.pdf" \
+  --output convertido.pdf
+
+# DOCX para PDF - Base64
+curl -X POST http://localhost:9000/converter-docx-pdf-base64 \
+  -F "arquivo=@documento.docx" \
+  -F "nome_arquivo=convertido.pdf"
 
 # PDF - Base64
 curl -X POST http://localhost:9000/converter-markdown-pdf-base64 \

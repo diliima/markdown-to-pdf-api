@@ -3,6 +3,7 @@ from flask import Flask, request, jsonify, send_file, make_response
 from markdown_to_pdf_reportlab import MarkdownToPDFReportLab
 from markdown_to_docx import MarkdownToDocx
 from json_to_excel import JsonToExcel
+from docx_to_pdf import DocxToPdf
 import traceback 
 import os   
 import logging
@@ -11,6 +12,7 @@ import tempfile
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from io import BytesIO
+import base64
 
 
 # Inicializa o app Flask
@@ -614,6 +616,210 @@ def converter_json_para_excel_base64():
         try:
             if 'temp_path' in locals() and os.path.exists(temp_path):
                 os.unlink(temp_path)
+        except Exception:
+            pass
+        
+        return jsonify({
+            "status": "erro",
+            "mensagem": f"Erro interno do servidor: {str(e)}"
+        }), 500
+
+
+@app.route("/converter-docx-pdf", methods=["POST"])
+def converter_docx_para_pdf_api():
+    """Converte arquivo DOCX/DOC para PDF via API.
+    
+    Espera um arquivo DOCX/DOC via multipart/form-data:
+    - arquivo: arquivo DOCX/DOC
+    - nome_arquivo: nome do arquivo de saída (opcional)
+    
+    Retorna o PDF como download ou erro.
+    """
+    try:
+        logging.info("=== INICIO - Conversão DOCX para PDF ===")
+        
+        # Verifica se há arquivo na requisição
+        if 'arquivo' not in request.files:
+            return jsonify({
+                "status": "erro",
+                "mensagem": "Nenhum arquivo foi enviado. Use 'arquivo' como nome do campo."
+            }), 400
+        
+        arquivo = request.files['arquivo']
+        
+        # Verifica se um arquivo foi selecionado
+        if arquivo.filename == '':
+            return jsonify({
+                "status": "erro",
+                "mensagem": "Nenhum arquivo foi selecionado"
+            }), 400
+        
+        # Verifica se é um arquivo DOCX ou DOC
+        if not (arquivo.filename.lower().endswith('.docx') or arquivo.filename.lower().endswith('.doc')):
+            return jsonify({
+                "status": "erro",
+                "mensagem": "Arquivo deve ter extensão .docx ou .doc"
+            }), 400
+        
+        # Nome do arquivo de saída
+        nome_arquivo_saida = request.form.get('nome_arquivo', f'documento_{uuid.uuid4().hex[:8]}.pdf')
+        if not nome_arquivo_saida.endswith('.pdf'):
+            nome_arquivo_saida += '.pdf'
+        
+        logging.info(f"Arquivo recebido: {arquivo.filename}")
+        logging.info(f"Arquivo de saída: {nome_arquivo_saida}")
+        
+        # Lê o conteúdo do arquivo
+        arquivo_content = arquivo.read()
+        
+        # Cria arquivo temporário para o PDF
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_pdf:
+            temp_pdf_path = temp_pdf.name
+        
+        # Converte DOCX para PDF
+        converter = DocxToPdf()
+        sucesso = converter.convert_docx_content_to_pdf(arquivo_content, temp_pdf_path)
+        
+        if not sucesso:
+            # Remove arquivo temporário se falhou
+            if os.path.exists(temp_pdf_path):
+                os.unlink(temp_pdf_path)
+            
+            return jsonify({
+                "status": "erro",
+                "mensagem": "Falha na conversão do arquivo para PDF"
+            }), 500
+        
+        logging.info(f"Conversão realizada com sucesso: {nome_arquivo_saida}")
+        
+        # Retorna o arquivo PDF como download
+        def remove_file(response):
+            try:
+                os.unlink(temp_pdf_path)
+            except Exception:
+                pass
+            return response
+        
+        return send_file(
+            temp_pdf_path,
+            as_attachment=True,
+            download_name=nome_arquivo_saida,
+            mimetype='application/pdf'
+        ), 200
+        
+    except Exception as e:
+        logging.error(f"Erro na conversão: {str(e)}")
+        traceback.print_exc()
+        
+        # Remove arquivo temporário se houve erro
+        try:
+            if 'temp_pdf_path' in locals() and os.path.exists(temp_pdf_path):
+                os.unlink(temp_pdf_path)
+        except Exception:
+            pass
+        
+        return jsonify({
+            "status": "erro",
+            "mensagem": f"Erro interno do servidor: {str(e)}"
+        }), 500
+
+
+@app.route("/converter-docx-pdf-base64", methods=["POST"])
+def converter_docx_para_pdf_base64():
+    """Converte arquivo DOCX/DOC para PDF e retorna em base64.
+    
+    Espera um arquivo DOCX/DOC via multipart/form-data:
+    - arquivo: arquivo DOCX/DOC
+    - nome_arquivo: nome do arquivo de saída (opcional)
+    
+    Retorna JSON com:
+    {
+        "status": "sucesso",
+        "nome_arquivo": "documento.pdf",
+        "pdf_base64": "base64_encoded_pdf_data",
+        "tamanho": 1234
+    }
+    """
+    try:
+        logging.info("=== INICIO - Conversão DOCX para PDF (Base64) ===")
+        
+        # Verifica se há arquivo na requisição
+        if 'arquivo' not in request.files:
+            return jsonify({
+                "status": "erro",
+                "mensagem": "Nenhum arquivo foi enviado. Use 'arquivo' como nome do campo."
+            }), 400
+        
+        arquivo = request.files['arquivo']
+        
+        # Verifica se um arquivo foi selecionado
+        if arquivo.filename == '':
+            return jsonify({
+                "status": "erro",
+                "mensagem": "Nenhum arquivo foi selecionado"
+            }), 400
+        
+        # Verifica se é um arquivo DOCX ou DOC
+        if not (arquivo.filename.lower().endswith('.docx') or arquivo.filename.lower().endswith('.doc')):
+            return jsonify({
+                "status": "erro",
+                "mensagem": "Arquivo deve ter extensão .docx ou .doc"
+            }), 400
+        
+        # Nome do arquivo de saída
+        nome_arquivo_saida = request.form.get('nome_arquivo', f'documento_{uuid.uuid4().hex[:8]}.pdf')
+        if not nome_arquivo_saida.endswith('.pdf'):
+            nome_arquivo_saida += '.pdf'
+        
+        logging.info(f"Arquivo recebido: {arquivo.filename}")
+        logging.info(f"Arquivo de saída: {nome_arquivo_saida}")
+        
+        # Lê o conteúdo do arquivo
+        arquivo_content = arquivo.read()
+        
+        # Cria arquivo temporário para o PDF
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_pdf:
+            temp_pdf_path = temp_pdf.name
+        
+        # Converte DOCX para PDF
+        converter = DocxToPdf()
+        sucesso = converter.convert_docx_content_to_pdf(arquivo_content, temp_pdf_path)
+        
+        if not sucesso:
+            # Remove arquivo temporário se falhou
+            if os.path.exists(temp_pdf_path):
+                os.unlink(temp_pdf_path)
+            
+            return jsonify({
+                "status": "erro",
+                "mensagem": "Falha na conversão do arquivo para PDF"
+            }), 500
+        
+        # Lê o PDF gerado e converte para base64
+        with open(temp_pdf_path, 'rb') as pdf_file:
+            pdf_content = pdf_file.read()
+            pdf_base64 = base64.b64encode(pdf_content).decode('utf-8')
+        
+        # Remove arquivo temporário
+        os.unlink(temp_pdf_path)
+        
+        logging.info(f"Conversão realizada com sucesso: {nome_arquivo_saida}")
+        
+        return jsonify({
+            "status": "sucesso",
+            "nome_arquivo": nome_arquivo_saida,
+            "pdf_base64": pdf_base64,
+            "tamanho": len(pdf_content)
+        }), 200
+        
+    except Exception as e:
+        logging.error(f"Erro na conversão: {str(e)}")
+        traceback.print_exc()
+        
+        # Remove arquivo temporário se houve erro
+        try:
+            if 'temp_pdf_path' in locals() and os.path.exists(temp_pdf_path):
+                os.unlink(temp_pdf_path)
         except Exception:
             pass
         

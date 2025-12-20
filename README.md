@@ -1,13 +1,15 @@
-# Conversor Markdown para PDF
+# Conversor Markdown para PDF + DOCX para PDF
 
-Este projeto oferece uma solução simples e eficaz para converter textos e arquivos Markdown em PDF usando Python.
+Este projeto oferece uma solução simples e eficaz para converter textos Markdown em PDF/Word e converter arquivos DOCX/DOC em PDF usando Python.
 
 ## 🚀 Características
 
 - ✅ **Compatível com Windows** - Não requer dependências externas complexas
+- ✅ **Múltiplos formatos** - Markdown para PDF/Word, DOCX/DOC para PDF  
+- ✅ **API REST** - Interface HTTP para integração com outros sistemas
 - ✅ **Fácil de usar** - Interface simples e intuitiva
-- ✅ **Rápido** - Conversão eficiente usando ReportLab
-- ✅ **Flexível** - Suporta texto direto ou arquivos .md
+- ✅ **Rápido** - Conversão eficiente usando ReportLab e python-docx
+- ✅ **Flexível** - Suporta texto direto ou arquivos
 - ✅ **Bem formatado** - PDFs com estilos profissionais
 
 ## 📦 Dependências
@@ -15,8 +17,12 @@ Este projeto oferece uma solução simples e eficaz para converter textos e arqu
 As seguintes bibliotecas são necessárias (já instaladas no ambiente):
 
 ```
+flask
 reportlab
 markdown2
+python-docx
+pandas
+openpyxl
 ```
 
 ## 🛠️ Como Usar
@@ -123,6 +129,66 @@ conversor = MarkdownToPDFReportLab(page_size=letter)
 # Usar conversor customizado
 conversor.markdown_text_to_pdf(texto, "saida.pdf")
 ```
+
+### Método 3: Converter DOCX/DOC para PDF
+
+```python
+from docx_to_pdf import DocxToPdf
+
+# Converter arquivo DOCX para PDF
+converter = DocxToPdf()
+sucesso = converter.convert_docx_to_pdf("documento.docx", "documento.pdf")
+
+if sucesso:
+    print("Conversão realizada com sucesso!")
+else:
+    print("Falha na conversão")
+```
+
+### Método 4: API REST
+
+O projeto inclui uma API Flask completa:
+
+```bash
+# Iniciar o servidor
+python app.py
+```
+
+**Endpoints disponíveis:**
+
+- `GET /verificar` - Health check
+- `POST /converter-markdown-pdf` - Markdown para PDF (download)
+- `POST /converter-markdown-pdf-base64` - Markdown para PDF (base64)
+- `POST /converter-markdown-docx` - Markdown para DOCX (download)
+- `POST /converter-markdown-docx-base64` - Markdown para DOCX (base64)
+- `POST /converter-docx-pdf` - DOCX/DOC para PDF (download)
+- `POST /converter-docx-pdf-base64` - DOCX/DOC para PDF (base64)
+- `POST /converter-json-excel-base64` - JSON para Excel (base64)
+
+**Exemplo de uso da API:**
+
+```python
+import requests
+
+# Converter Markdown para PDF
+response = requests.post(
+    'http://localhost:9000/converter-markdown-pdf-base64',
+    json={
+        'texto_markdown': '# Título\n\nConteúdo **formatado**.',
+        'nome_arquivo': 'teste.pdf'
+    }
+)
+
+# Converter DOCX para PDF
+with open('documento.docx', 'rb') as file:
+    response = requests.post(
+        'http://localhost:9000/converter-docx-pdf',
+        files={'arquivo': file},
+        data={'nome_arquivo': 'convertido.pdf'}
+    )
+```
+
+Consulte [API_DOCS.md](API_DOCS.md) para documentação completa.
 
 ## 🧪 Teste Rápido
 
